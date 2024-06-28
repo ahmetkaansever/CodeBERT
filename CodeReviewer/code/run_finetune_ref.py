@@ -27,10 +27,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def fn(features):
+    return features
 
 def get_loader(data_file, args, tokenizer, pool, eval=False):
-    def fn(features):
-        return features
     global_rank = args.global_rank
     if args.raw_input:
         dataset = SimpleRefineDataset(tokenizer, pool, args, data_file)
@@ -42,7 +42,7 @@ def get_loader(data_file, args, tokenizer, pool, eval=False):
     if eval:
         sampler = SequentialSampler(dataset)
     else:
-        sampler = DistributedSampler(dataset)
+        sampler = RandomSampler(dataset)
     dataloader = DataLoader(dataset, sampler=sampler, batch_size=args.train_batch_size, num_workers=args.cpu_count, collate_fn=fn)
     return dataset, sampler, dataloader
 
@@ -114,20 +114,24 @@ def save_model(model, optimizer, scheduler, output_dir, config):
 
 
 def main(args):
-    dist.init_process_group(backend="nccl")
-    local_rank = dist.get_rank() % args.gpu_per_node
+    #dist.init_process_group(backend="nccl")
+    #local_rank = dist.get_rank() % args.gpu_per_node
+    local_rank = 0  # Changed: Always 0 for a single GPU setup
     args.global_rank = local_rank + args.node_index * args.gpu_per_node
     args.local_rank = local_rank
-    args.world_size = dist.get_world_size()
-    logger.warning("Process rank: %s, global rank: %s, world size: %s, bs: %s",
-                   args.local_rank, args.global_rank, \
-                   torch.distributed.get_world_size(), \
-                   args.train_batch_size)
-    torch.cuda.set_device(local_rank)
+    #args.world_size = dist.get_world_size()
+    args.world_size = 0
+    # logger.warning("Process rank: %s, global rank: %s, world size: %s, bs: %s",
+    #                args.local_rank, args.global_rank, \
+    #                torch.distributed.get_world_size(), \
+    #                args.train_batch_size)
+    
+    torch.cuda.set_device(local_rank)  # Changed: Set device to local_rank (which is 0)
 
     set_seed(args)
     config, model, tokenizer = build_or_load_gen_model(args)
-    model = DDP(model.cuda(), device_ids=[local_rank], output_device=local_rank, find_unused_parameters=True)
+    #model = DDP(model.cuda(), device_ids=[local_rank], output_device=local_rank, find_unused_parameters=True)
+    model = model.cuda()
     pool = multiprocessing.Pool(args.cpu_count)
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
@@ -268,6 +272,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--local-rank", type=int, default=0)
     args = add_args(parser)
     args.cpu_count = multiprocessing.cpu_count()
     # remove long tokenization warning. ref: https://github.com/huggingface/transformers/issues/991
