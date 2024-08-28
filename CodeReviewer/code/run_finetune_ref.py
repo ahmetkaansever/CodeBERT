@@ -250,8 +250,7 @@ def main(args):
                     )
             if global_step == args.train_steps and args.global_rank == 0:
                 # end training
-                bleu = eval_bleu_epoch(args, valid_dataloader, model, tokenizer)
-                output_dir = os.path.join(args.output_dir, "checkpoints-last" + "-" + str(bleu))
+                output_dir = os.path.join(args.output_dir, "checkpoints-last")
                 save_model(model, optimizer, scheduler, output_dir, config)
                 logger.info(f"Reach max steps {args.train_steps}.")
                 time.sleep(5)
@@ -259,8 +258,7 @@ def main(args):
             if args.global_rank == 0 and \
                     global_step % save_steps == 0 and \
                     nb_tr_steps % args.gradient_accumulation_steps == 0:
-                bleu = eval_bleu_epoch(args, valid_dataloader, model, tokenizer)
-                output_dir = os.path.join(args.output_dir, "checkpoints-" + str(global_step) + "-" + str(bleu))
+                output_dir = os.path.join(args.output_dir, "checkpoints-" + str(global_step))
                 save_model(model, optimizer, scheduler, output_dir, config)
                 logger.info(
                     "Save the {}-step model and optimizer into {}".format(
